@@ -7,13 +7,14 @@
 //
 
 import Foundation
+
+
 /// wrapper around NSNotificationCenter
-open class SimpleNotification<T> :BaseNotificationProtocol{
+open class SimpleNotification<T>: BaseNotificationProtocol{
     public typealias SimpleNotificationHandler = (_ value:T) -> Void
-    
-    fileprivate var
-    notificationHandler:SimpleNotificationHandler?, // handler that store code block
-    name: String                                    // name for NSNotificationCenter
+
+    fileprivate var notificationHandlers = [AnyHashable: SimpleNotificationHandler]() // handler that store code block
+    fileprivate var name: String                                    // name for NSNotificationCenter
     /**
      Creates notification class.
      - parameter name:  name for NSNotificationCenter
@@ -26,19 +27,18 @@ open class SimpleNotification<T> :BaseNotificationProtocol{
      returns true if subscribed
      */
     public var isSubscribed:Bool{
-        return notificationHandler != nil
+        return notificationHandlers.count > 0
     }
-    
+
     //MARK: public methods
     /**
      subscribe to notification with handler or unSubscribe from notifications.
      - parameter handler:  handler(value). If handler == nil, unSubscribe() will be performed
      */
-    open func subscribe(_ handler: SimpleNotificationHandler?){
-        unSubscribe()
+    open func subscribe(_ sender: AnyHashable, withHandler handler: SimpleNotificationHandler?){
         if let handler = handler {
-            notificationHandler = handler
             _subscribe()
+            notificationHandlers.updateValue(handler, forKey: sender)
         }
     }
     /**
@@ -52,37 +52,46 @@ open class SimpleNotification<T> :BaseNotificationProtocol{
     /**
      Unsubscribe and remove notificationHandler
      */
-    open func unSubscribe(){
-        notificationHandler = nil
+    open func unSubscribe(_ sender: AnyHashable){
+        notificationHandlers.removeValue(forKey: sender)
+        if notificationHandlers.count == 0 {
+            NotificationCenter.default.removeObserver(self)
+        }
+    }
+
+    open func unSubscribeAll() {
+        notificationHandlers.removeAll()
         NotificationCenter.default.removeObserver(self)
     }
-    
+
     //MARK: private methods
     fileprivate func _subscribe(){
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(self.methodOfReceivedNotification(_:)),
-            name:NSNotification.Name(rawValue: name),
-            object: nil
-        )
+        if !isSubscribed {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(self.methodOfReceivedNotification(_:)),
+                name:NSNotification.Name(rawValue: name),
+                object: nil
+            )
+        }
     }
-    
+
     @objc func methodOfReceivedNotification(_ notification: Notification){
         if let value = (notification.object as? Wrapper<T>)?.wrappedValue{
-            notificationHandler?(value)
+            notificationHandlers.values.forEach { $0(value) }
         } else {
             var givenTypeString = "nil"
             let givenType = type(of: notification.object)
             givenTypeString = String(describing: givenType)
-            
+
             handleError("SimpleNotification TYPE ERROR \n expected type: \(T.self) \n given type:     \(givenTypeString)")
         }
     }
-    
+
     deinit {
-        unSubscribe()
+        unSubscribeAll()
     }
-    
+
 }
 
 //for tests
@@ -97,7 +106,7 @@ public protocol BaseNotificationProtocol {
      subscribe to notification with handler or unSubscribe from notifications.
      - parameter handler:  handler(value). If handler == nil, unSubscribe() will be performed
      */
-    func subscribe(_ handler: ((_ value:T) -> Void)?)
+    func subscribe(_ sender: AnyHashable, withHandler handler: ((_ value:T) -> Void)?)
     /**
      Posts the notification with the given value to the specified center.
      - parameter object:  The data to be sent with the notification.
@@ -106,7 +115,9 @@ public protocol BaseNotificationProtocol {
     /**
      Unsubscribe and remove notificationHandler
      */
-    func unSubscribe()
+    func unSubscribe(_ sender: AnyHashable)
+
+    func unSubscribeAll()
 }
 
 extension SimpleNotification {
