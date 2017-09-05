@@ -80,11 +80,7 @@ open class SimpleNotification<T>: BaseNotificationProtocol{
         if let value = (notification.object as? Wrapper<T>)?.wrappedValue{
             notificationHandlers.values.forEach { $0(value) }
         } else {
-            var givenTypeString = "nil"
-            let givenType = type(of: notification.object)
-            givenTypeString = String(describing: givenType)
-
-            handleError("SimpleNotification TYPE ERROR \n expected type: \(T.self) \n given type:     \(givenTypeString)")
+            notificationHandlers.values.forEach { $0(notification.object as! T) }
         }
     }
 
